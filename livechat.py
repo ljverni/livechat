@@ -28,7 +28,7 @@ cf.go_offline()
 
 
 #DF SOURCE#
-df_source = pd.read_csv(r"C:\Users\l.verni\Desktop\Analytics\Livechat\data\source.csv")
+df_source = pd.read_csv(r"C:\Users\l.verni\Documents\Local-Repo\analytics\Livechat\source.csv")
 
 df_source.rename(columns={"conferenceId": "id", "chat start date Europe/London": "start_time", "chat start url": "url_source", "group name": "site", "last rate comment": "rate_comment", "last operator id": "agent_id", "operator 1 nick": "agent_1", "operator 2 nick": "agent_2", "operator 3 nick": "agent_3", "post chat: Would you use chat again?": "survey_chat", "post chat: How likely are you to use Techbuyer again?": "survey_tb"}, inplace=True)
 
@@ -40,18 +40,24 @@ df_source.reset_index(drop=True, inplace=True)
 df_source[["site", "rate", "agent_1", "agent_2"]] = df_source[["site", "rate", "agent_1", "agent_2"]].replace(" ", "_", regex=True)
 
 df_source["date"] = df_source["start_time"].apply(lambda x: x[0:10]) #date column
-df_source["qa_score"] = np.nan
 
-#TRANSFERRED COLUMN#
+
+#DF TRANSFERRED#
 df_source["transferred"] = df_source["agent_2"].apply(lambda x: 1 if type(x) == str else 0)
+
+df_transf = df_source.groupby(["date", "agent_1", "site"], as_index=False).agg({"transferred": "sum"}).rename(columns={"agent_1": "agent"})
 
 #RATED COLUMNS#
 df_source["rated_good"] = df_source["rate"].apply(lambda x: 1 if x == "rated_good" else 0)
 df_source["rated_bad"] = df_source["rate"].apply(lambda x: 1 if x == "rated_bad" else 0)
 
 #DF PERFORMANCE#
-df_perf = pd.read_csv(r"C:\Users\l.verni\Desktop\Analytics\Livechat\data\performance.csv").set_index("Agent")
+df_perf = pd.read_csv(r"C:\Users\l.verni\Documents\Local-Repo\analytics\Livechat\performance.csv").set_index("Agent")
 
+#QA
+import random
+for i in range(0, len(df_source), 3):
+    df_source.at[i, "qa_score"] = random.randint(0, 100)
 
 #MAIN AGENT#
 df_source["agent"] = ""
@@ -64,14 +70,21 @@ for i in range(len(df_source)):
         df_source.at[i, "agent"] = df_source.iloc[i]["agent_3"]
 
 #DF AGENT#
-df_agent_daily = df_source.groupby(["agent", "agent_id", "date", "site"], as_index=False).agg({"rate": "count", "transferred": "sum", "rated_good": "sum", "rated_bad": "sum", "qa_score": "mean"}).rename(columns={"rate": "chats_total"})
+df_agent_daily = df_source.groupby(["date", "agent", "agent_id", "site"], as_index=False).agg({"rate": "count", "rated_good": "sum", "rated_bad": "sum"}).rename(columns={"rate": "chats_total"})
 
-df_agent_weekly = df_source.groupby(["agent", "agent_id", "site"], as_index=False).agg({"rate": "count", "transferred": "sum", "rated_good": "sum", "rated_bad": "sum", "qa_score": "mean"}).rename(columns={"rate": "chats_total"})
-df_agent_weekly.insert(7, "availability", df_agent_weekly["agent_id"].apply(lambda x: df_perf.loc[x]["Accepting time"]))
 
+df_agent_weekly = df_source.groupby(["agent", "agent_id", "site"], as_index=False).agg({"rate": "count", "rated_good": "sum", "rated_bad": "sum"}).rename(columns={"rate": "chats_total"})
+
+df_agent_weekly.insert(6, "availability", df_agent_weekly["agent_id"].apply(lambda x: df_perf.loc[x]["Accepting time"]))
+
+df_t = df_transf.groupby(["agent", "site"], as_index=False).agg({"transferred": "sum"})
+df_agent_weekly.insert(4, "transferred", df_t["transferred"]) #TRANSFERRED COLUMN
 
 #DF SITE#
-df_site = df_agent_weekly.groupby(["site"], as_index=False).agg({"chats_total": "sum", "transferred": "sum", "rated_good": "sum", "rated_bad": "sum", "availability": "sum", "qa_score": "mean"}).rename(columns={"rate": "chats_total"})
+df_site = df_agent_weekly.groupby(["site"], as_index=False).agg({"chats_total": "sum", "transferred": "sum", "rated_good": "sum", "rated_bad": "sum", "availability": "sum"}).rename(columns={"rate": "chats_total"})
+
+df_site_daily = df_source.groupby(["date", "site"], as_index=False).agg({"rate": "count", "rated_good": "sum", "rated_bad": "sum"}).rename(columns={"rate": "chats_total"})
+
 
 #DF SURVEY#
 df_survey = df_source[["site", "survey_chat", "survey_tb"]].drop(df_source[(df_source["survey_chat"].isnull())|(df_source["survey_tb"].isnull())].index).reset_index(drop=True)
@@ -97,4 +110,41 @@ df_survey_tb = df_survey_tb.fillna(0).drop(columns="survey_tb").groupby("site").
 comments = df_source[df_source["rate_comment"].notnull()][["rate_comment", "agent"]]
 comments["rate_comment"] = comments["rate_comment"] + " (" +comments.agent + ")"
 comments = comments.drop(columns="agent")
+
+
+
+###############
+#VISUALIZATION#
+###############
+
+
+for site in df_site["site"].unique():
+    df = df_site[df_site["site"]==site].set_index(["site"])
+    fig = plt.figure(figsize=(10, 1))
+    ax = sns.heatmap(df, annot=True)
+
+
+for site in df_agent_weekly["site"].unique():
+    df = df_agent_weekly[df_agent_weekly["site"]==site].drop(columns=["agent_id", "site"]).set_index(["agent"])
+    fig = plt.figure(figsize=(10, 2))
+    ax = sns.heatmap(df, annot=True)
+
+
+
+#QA SEPARATE DF
+# for site in df_agent_weekly["site"].unique():
+#     df = 
+#     fig = plt.figure(figsize=(10, 2))
+#     ax = sns.barplot(df.qa_score, df.agent, data=df, palette="Blues_d", orient="h")
+
+
+
+#PLOT DAILY CHATS PER DAY PER SITE
+
+
+#DONUT SURVEY  TB
+
+#Mekko Chart SURVEY CHAT
+
+
 

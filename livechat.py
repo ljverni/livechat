@@ -37,7 +37,11 @@ df_source.drop(df_source[df_source.site == "DE Sales"].index, inplace=True) #dro
 df_source = df_source[["id", "start_time", "site", "rate_comment", "agent_id", "agent_1", "agent_2", "agent_3", "rate", "survey_chat", "survey_tb"]]
 df_source.reset_index(drop=True, inplace=True)
 
-df_source[["site", "rate", "agent_1", "agent_2"]] = df_source[["site", "rate", "agent_1", "agent_2"]].replace(" ", "_", regex=True)
+df_source[["site", "agent_1", "agent_2", "agent_3"]] = df_source[["site", "agent_1", "agent_2", "agent_3"]].apply(lambda x: x.str.lower()) #lower case
+
+df_source[["rate", "agent_1", "agent_2"]] = df_source[["rate", "agent_1", "agent_2"]].replace(" ", "_", regex=True)
+
+df_source["site"] = df_source["site"].apply(lambda x: x.split(" ")[0]) #deleting sales from site
 
 df_source["date"] = df_source["start_time"].apply(lambda x: x[0:10]) #date column
 
@@ -54,10 +58,15 @@ df_source["rated_bad"] = df_source["rate"].apply(lambda x: 1 if x == "rated_bad"
 #DF PERFORMANCE#
 df_perf = pd.read_csv(r"C:\Users\l.verni\Documents\Local-Repo\analytics\Livechat\performance.csv").set_index("Agent")
 
-#QA
-import random
-for i in range(0, len(df_source), 3):
-    df_source.at[i, "qa_score"] = random.randint(0, 100)
+#DF QA
+df_qa = pd.read_excel(r"C:\Users\l.verni\Documents\Local-Repo\analytics\Livechat\qa_test.xlsx", engine="openpyxl", sheet_name="Sheet2")
+df_qa = df_qa.drop(df_qa[df_qa["agent"]==0].index)
+df_qa["date"] = df_qa["date"].apply(lambda x: x.date().strftime('%d/%m/%Y'))
+df_qa["score"] = df_qa["score"].apply(lambda x: round((x*100), 2))
+
+df_qa_actions = pd.read_excel(r"C:\Users\l.verni\Documents\Local-Repo\analytics\Livechat\qa_test.xlsx", engine="openpyxl", sheet_name="Sheet3")
+df_qa_actions["yes"] = round(df_qa_actions["yes"] / (df_qa_actions["no"] + df_qa_actions["yes"]) *100, 2)
+df_qa_actions = df_qa_actions[["action", "yes"]].sort_values("yes").reset_index(drop=True)[:5].rename(columns={"yes": "%"})
 
 #MAIN AGENT#
 df_source["agent"] = ""
@@ -117,34 +126,44 @@ comments = comments.drop(columns="agent")
 #VISUALIZATION#
 ###############
 
+#SITE HEATMAP
+# for site in df_site["site"].unique():
+#     df = df_site[df_site["site"]==site].set_index(["site"])
+#     fig = plt.figure(figsize=(10, 1))
+#     ax = sns.heatmap(df, annot=True)
 
-for site in df_site["site"].unique():
-    df = df_site[df_site["site"]==site].set_index(["site"])
-    fig = plt.figure(figsize=(10, 1))
-    ax = sns.heatmap(df, annot=True)
-
-
-for site in df_agent_weekly["site"].unique():
-    df = df_agent_weekly[df_agent_weekly["site"]==site].drop(columns=["agent_id", "site"]).set_index(["agent"])
-    fig = plt.figure(figsize=(10, 2))
-    ax = sns.heatmap(df, annot=True)
-
-
-
-#QA SEPARATE DF
+#AGENT WEEKLY HEATMAP
 # for site in df_agent_weekly["site"].unique():
-#     df = 
+#     df = df_agent_weekly[df_agent_weekly["site"]==site].drop(columns=["agent_id", "site"]).set_index(["agent"])
 #     fig = plt.figure(figsize=(10, 2))
-#     ax = sns.barplot(df.qa_score, df.agent, data=df, palette="Blues_d", orient="h")
+#     ax = sns.heatmap(df, annot=True)
 
 
+#SITE CHATS DAILY BAR CHART
+# for site in df_agent_weekly["site"].unique():
+#     df = df_site_daily[df_site_daily["site"]==site]
+#     fig = plt.figure(figsize=(10, 8))
+#     ax = sns.barplot(df.date, df.chats_total)
 
-#PLOT DAILY CHATS PER DAY PER SITE
 
+# QA HEATMAP
+# df = df_qa.set_index(["date", "agent"])
+# fig = plt.figure(figsize=(10, 2))
+# ax = sns.heatmap(df, annot=True)
+
+
+#QA HORIZONTAL BAR PLOT ACTIONS
+# df = df_qa_actions.set_index("action")
+# fig = plt.figure(figsize=(10, 2))
+# ax = sns.heatmap(df, annot=True)
+
+#DONUT SURVEY  CHAT
+# df = df_survey_chat
+# fig = plt.figure(figsize=(5, 5))
+# ax = plt.pie((df.Yes[0], df.No[0]))
 
 #DONUT SURVEY  TB
-
-#Mekko Chart SURVEY CHAT
-
-
+# df = df_survey_tb
+# fig = plt.figure(figsize=(5, 5))
+# ax = plt.pie((df["Likely"][2], df["Maybe"][2], df["Absolutely!"][2], df["Very Unlikely"][2]))
 
